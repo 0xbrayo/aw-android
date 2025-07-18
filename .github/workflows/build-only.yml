@@ -194,7 +194,7 @@ jobs:
         make dist/aw-android.${{ matrix.type }}
 
     - name: Upload
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: aw-android
         path: dist/aw-android*.${{ matrix.type }}
