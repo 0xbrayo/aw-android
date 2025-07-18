@@ -106,7 +106,7 @@ jobs:
 
   build-apk:
     name: Build ${{ matrix.type }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [build-rust, get-versionCode]
     strategy:
       fail-fast: true
