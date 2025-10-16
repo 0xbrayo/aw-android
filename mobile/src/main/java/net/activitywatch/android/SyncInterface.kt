@@ -16,8 +16,11 @@ class SyncInterface(context: Context) {
     private val syncDir: String
     
     init {
-        // Set sync directory to external storage for access by sync apps
-        syncDir = appContext.getExternalFilesDir(null)?.absolutePath + "/ActivityWatchSync"
+        // Use Downloads folder for easy user access: /sdcard/Download/ActivityWatch/
+        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(
+            android.os.Environment.DIRECTORY_DOWNLOADS
+        )
+        syncDir = "$downloadsDir/ActivityWatch"
         Os.setenv("AW_SYNC_DIR", syncDir, true)
         
         // Create sync directory if it doesn't exist
