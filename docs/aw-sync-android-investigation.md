@@ -2,7 +2,40 @@
 
 **Branch**: `investigate-aw-sync`
 **Date**: 2025-10-16
-**Status**: Investigation Complete
+**Status**: Phases 1-3 Complete (aw-server-rust), Phases 4-5 Pending (aw-android)
+
+## Update: Implementation Progress
+
+### ✅ Completed in aw-server-rust (dev/sync-jni branch)
+
+**Phase 1: Library Preparation**
+- Modified `aw-sync/Cargo.toml` to make CLI dependencies optional
+- Added JNI dependency for Android target
+- Created `aw-sync/src/android.rs` with JNI bindings
+- Made `main.rs` conditional on `cli` feature
+- Fixed `sync.rs` to conditionally import clap
+
+**Phase 2: Android Build Integration**
+- Updated `compile-android.sh` to build aw-sync alongside aw-server
+- Configured to build with `--no-default-features` for Android
+
+**Phase 3: JNI Implementation**
+- Implemented 5 JNI functions in android.rs:
+  - `syncPullAll()` - Pull from all hosts
+  - `syncPull(hostname)` - Pull from specific host
+  - `syncPush()` - Push local data
+  - `syncBoth()` - Full bidirectional sync
+  - `getSyncDir()` - Get sync directory path
+- All functions return JSON responses with success/error status
+- Build verified: `cargo check -p aw-sync --lib --no-default-features` ✅
+
+**Commits:**
+- `dc06dea` - feat(aw-sync): add Android JNI support and library build
+- `b3fd7ef` - fix(aw-sync): make clap import and ValueEnum derive conditional
+
+### 🔄 Next: Phases 4-5 in aw-android
+
+These phases need to be implemented in the aw-android repository.
 
 ## Executive Summary
 
@@ -166,3 +199,313 @@ Estimated complexity: **Medium**
 - aw-sync implementation: `/aw-server-rust/aw-sync/`
 - Current build script: `/aw-server-rust/compile-android.sh`
 - aw-sync README: `/aw-server-rust/aw-sync/README.md`
+
+## Phase 4-5 Implementation Guide (aw-android)
+
+### Prerequisites
+
+1. Rebuild aw-server-rust with sync support:
+   ```bash
+   cd aw-server-rust
+   git checkout dev/sync-jni
+   ./compile-android.sh
+   ```
+   This will generate both `libaw_server.so` and `libaw_sync.so` for all architectures.
+
+2. Copy the generated libraries to aw-android:
+   ```bash
+   # From aw-server-rust directory
+   for arch in arm64-v8a armeabi-v7a x86 x86_64; do
+     cp target/*/release/libaw_sync.so ../aw-android/mobile/src/main/jniLibs/$arch/
+   done
+   ```
+
+### Phase 4: Android App Integration
+
+#### Step 1: Create SyncInterface.kt
+
+Create `mobile/src/main/java/net/activitywatch/android/SyncInterface.kt`:
+
+```kotlin
+package net.activitywatch.android
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.system.Os
+import android.util.Log
+import org.json.JSONObject
+import java.util.concurrent.Executors
+
+private const val TAG = "SyncInterface"
+
+class SyncInterface(context: Context) {
+    private val appContext: Context = context.applicationContext
+    private val syncDir: String
+    
+    init {
+        // Set sync directory to external storage for access by sync apps
+        syncDir = appContext.getExternalFilesDir(null)?.absolutePath + "/ActivityWatchSync"
+        Os.setenv("AW_SYNC_DIR", syncDir, true)
+        
+        // Create sync directory if it doesn't exist
+        java.io.File(syncDir).mkdirs()
+        
+        System.loadLibrary("aw_sync")
+        Log.i(TAG, "aw-sync initialized with sync dir: $syncDir")
+    }
+    
+    // Native functions
+    private external fun syncPullAll(port: Int): String
+    private external fun syncPull(port: Int, hostname: String): String
+    private external fun syncPush(port: Int): String
+    private external fun syncBoth(port: Int): String
+    external fun getSyncDir(): String
+    
+    // Async wrappers
+    fun syncPullAllAsync(callback: (Boolean, String) -> Unit) {
+        performSyncAsync("Pull All") {
+            syncPullAll(5600)
+        }.also { (success, message) ->
+            callback(success, message)
+        }
+    }
+    
+    fun syncPushAsync(callback: (Boolean, String) -> Unit) {
+        performSyncAsync("Push") {
+            syncPush(5600)
+        }.also { (success, message) ->
+            callback(success, message)
+        }
+    }
+    
+    fun syncBothAsync(callback: (Boolean, String) -> Unit) {
+        performSyncAsync("Full Sync") {
+            syncBoth(5600)
+        }.also { (success, message) ->
+            callback(success, message)
+        }
+    }
+    
+    private fun performSyncAsync(operation: String, syncFn: () -> String): Pair<Boolean, String> {
+        val executor = Executors.newSingleThreadExecutor()
+        val handler = Handler(Looper.getMainLooper())
+        
+        var result: Pair<Boolean, String> = Pair(false, "")
+        
+        executor.execute {
+            try {
+                val response = syncFn()
+                val json = JSONObject(response)
+                val success = json.getBoolean("success")
+                val message = if (success) {
+                    json.getString("message")
+                } else {
+                    json.getString("error")
+                }
+                result = Pair(success, message)
+                
+                handler.post {
+                    Log.i(TAG, "$operation completed: $message")
+                }
+            } catch (e: Exception) {
+                result = Pair(false, "Exception: ${e.message}")
+                handler.post {
+                    Log.e(TAG, "$operation failed", e)
+                }
+            }
+        }
+        
+        return result
+    }
+    
+    fun getSyncDirectory(): String = syncDir
+}
+```
+
+#### Step 2: Add Sync UI
+
+Create a sync fragment or add to settings. Example in `SettingsFragment.kt`:
+
+```kotlin
+// In your settings or main activity
+private lateinit var syncInterface: SyncInterface
+
+override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    syncInterface = SyncInterface(requireContext())
+    
+    // Add sync buttons
+    binding.btnSyncPull.setOnClickListener {
+        showSyncProgress("Pulling data...")
+        syncInterface.syncPullAllAsync { success, message ->
+            hideSyncProgress()
+            showSyncResult(success, message)
+        }
+    }
+    
+    binding.btnSyncPush.setOnClickListener {
+        showSyncProgress("Pushing data...")
+        syncInterface.syncPushAsync { success, message ->
+            hideSyncProgress()
+            showSyncResult(success, message)
+        }
+    }
+    
+    binding.btnSyncBoth.setOnClickListener {
+        showSyncProgress("Syncing...")
+        syncInterface.syncBothAsync { success, message ->
+            hideSyncProgress()
+            showSyncResult(success, message)
+        }
+    }
+    
+    // Display sync directory
+    binding.txtSyncDir.text = "Sync Directory: ${syncInterface.getSyncDirectory()}"
+}
+```
+
+#### Step 3: Add Storage Permissions
+
+In `AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+    android:maxSdkVersion="32"/>
+```
+
+Request permissions at runtime for Android 6.0+.
+
+### Phase 5: Background Sync with WorkManager
+
+#### Step 1: Add WorkManager Dependency
+
+In `build.gradle`:
+
+```gradle
+dependencies {
+    implementation "androidx.work:work-runtime-ktx:2.8.1"
+}
+```
+
+#### Step 2: Create SyncWorker
+
+Create `mobile/src/main/java/net/activitywatch/android/workers/SyncWorker.kt`:
+
+```kotlin
+package net.activitywatch.android.workers
+
+import android.content.Context
+import androidx.work.*
+import net.activitywatch.android.SyncInterface
+import java.util.concurrent.TimeUnit
+
+class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    
+    override fun doWork(): Result {
+        return try {
+            val syncInterface = SyncInterface(applicationContext)
+            
+            // Perform sync operation
+            syncInterface.syncBothAsync { success, message ->
+                if (success) {
+                    Log.i("SyncWorker", "Background sync successful: $message")
+                } else {
+                    Log.w("SyncWorker", "Background sync failed: $message")
+                }
+            }
+            
+            Result.success()
+        } catch (e: Exception) {
+            Log.e("SyncWorker", "Background sync error", e)
+            Result.retry()
+        }
+    }
+    
+    companion object {
+        fun schedulePeriodic(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.UNMETERED) // WiFi only
+                .setRequiresBatteryNotLow(true)
+                .build()
+            
+            val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(
+                30, TimeUnit.MINUTES
+            )
+                .setConstraints(constraints)
+                .build()
+            
+            WorkManager.getInstance(context)
+                .enqueueUniquePeriodicWork(
+                    "periodic_sync",
+                    ExistingPeriodicWorkPolicy.KEEP,
+                    syncRequest
+                )
+        }
+    }
+}
+```
+
+#### Step 3: Schedule Background Sync
+
+In your Application class or MainActivity:
+
+```kotlin
+override fun onCreate() {
+    super.onCreate()
+    
+    // Schedule periodic sync
+    if (PreferenceManager.getDefaultSharedPreferences(this)
+            .getBoolean("enable_background_sync", false)) {
+        SyncWorker.schedulePeriodic(this)
+    }
+}
+```
+
+### Testing
+
+1. **Manual Sync Test**:
+   - Trigger manual sync from UI
+   - Check logs for success/error messages
+   - Verify files created in sync directory
+
+2. **Multi-Device Test**:
+   - Set up Syncthing or similar to sync the directory
+   - Generate events on device A
+   - Sync push from device A
+   - Sync pull on device B
+   - Verify events appear on device B
+
+3. **Background Sync Test**:
+   - Enable background sync
+   - Wait for scheduled execution
+   - Check WorkManager logs
+
+### Troubleshooting
+
+**Library Not Loading**:
+- Verify `libaw_sync.so` exists in all `jniLibs/` folders
+- Check NDK build output for errors
+- Ensure correct architecture for test device
+
+**Sync Directory Not Found**:
+- Check storage permissions granted
+- Verify `AW_SYNC_DIR` set correctly
+- Check external storage is available
+
+**JNI Function Not Found**:
+- Verify JNI function names match exactly
+- Check package name in android.rs matches Kotlin
+- Rebuild native libraries
+
+### Next Steps
+
+1. Build aw-server-rust with new sync support
+2. Copy libraries to aw-android
+3. Implement SyncInterface.kt
+4. Add basic UI with sync buttons
+5. Test manual sync operations
+6. Add WorkManager for background sync
+7. Polish UI and error handling
+8. Update documentation
