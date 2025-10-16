@@ -1,7 +1,3 @@
-[submodule "aw-server-rust"]
-	path = aw-server-rust
-	url = https://github.com/0xbrayo/aw-server-rust.git
-	branch = dev/sync-jni
 [submodule "mobile/src/main/res/drawable/media"]
 	path = mobile/src/main/res/drawable/media
 	url = https://github.com/ActivityWatch/media.git
