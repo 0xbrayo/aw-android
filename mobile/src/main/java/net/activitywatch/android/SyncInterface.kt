@@ -31,30 +31,40 @@ class SyncInterface(context: Context) {
     }
     
     // Native JNI functions
-    private external fun syncPullAll(port: Int): String
+    private external fun syncPullAll(port: Int, hostname: String): String
     private external fun syncPull(port: Int, hostname: String): String
-    private external fun syncPush(port: Int): String
-    private external fun syncBoth(port: Int): String
+    private external fun syncPush(port: Int, hostname: String): String
+    private external fun syncBoth(port: Int, hostname: String): String
     external fun getSyncDir(): String
+    
+    private fun getDeviceName(): String {
+        return android.provider.Settings.Global.getString(
+            appContext.contentResolver, 
+            android.provider.Settings.Global.DEVICE_NAME
+        ) ?: android.os.Build.MODEL ?: "Unknown"
+    }
     
     // Async wrapper for syncPullAll
     fun syncPullAllAsync(callback: (Boolean, String) -> Unit) {
+        val hostname = getDeviceName()
         performSyncAsync("Pull All", callback) {
-            syncPullAll(5600)
+            syncPullAll(5600, hostname)
         }
     }
     
     // Async wrapper for syncPush
     fun syncPushAsync(callback: (Boolean, String) -> Unit) {
+        val hostname = getDeviceName()
         performSyncAsync("Push", callback) {
-            syncPush(5600)
+            syncPush(5600, hostname)
         }
     }
     
     // Async wrapper for syncBoth
     fun syncBothAsync(callback: (Boolean, String) -> Unit) {
+        val hostname = getDeviceName()
         performSyncAsync("Full Sync", callback) {
-            syncBoth(5600)
+            syncBoth(5600, hostname)
         }
     }
     
