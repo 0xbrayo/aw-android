@@ -17,7 +17,6 @@ env:
 jobs:
   build-rust:
     name: Build aw-server-rust
-    # runs-on: ubuntu-latest
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
@@ -209,3 +208,44 @@ jobs:
       with:
         name: aw-android.${{ matrix.type }}
         path: dist/aw-android*.${{ matrix.type }}
+
+  release-gh:
+    needs: build-apk
+    if: startsWith(github.ref, 'refs/tags/v')  # only on runs triggered from tag
+    runs-on: macos-latest
+    steps:
+
+    # Will download all artifacts to path
+    - name: Download release APK
+      uses: actions/download-artifact@v6
+      with:
+        name: aw-android.apk
+        path: dist
+    
+    - name: Download release AAB
+      uses: actions/download-artifact@v6
+      with:
+        name: aw-android.aab
+        path: dist
+
+    - name: Display structure of downloaded files
+      working-directory: dist
+      run: ls -R
+
+    # detect if version tag is stable/beta
+    - uses: nowsprinting/check-version-format-action@v2
+      id: version
+      with:
+        prefix: 'v'
+
+    # create a release
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        draft: true
+        prerelease: ${{ !(steps.version.outputs.is_stable == 'true') }}  # must compare to true, since boolean outputs are actually just strings, and "false" is truthy since it's not empty: https://github.com/actions/runner/issues/1483#issuecomment-994986996
+        files: |
+          dist/*.apk
+          dist/*.aab
+        # body_path: dist/release_notes/release_notes.md
+
