@@ -233,7 +233,7 @@ jobs:
       run: ls -R
 
     # detect if version tag is stable/beta
-    - uses: nowsprinting/check-version-format-action@v2
+    - uses: nowsprinting/check-version-format-action@v4
       id: version
       with:
         prefix: 'v'
