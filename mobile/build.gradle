@@ -104,6 +104,9 @@ dependencies {
     androidTestImplementation('org.awaitility:awaitility:4.3.0') {
         exclude group: 'org.hamcrest', module: 'hamcrest'
     }
+
+    // WorkManager
+    implementation "androidx.work:work-runtime-ktx:2.9.1"
 }
 
 // Can be used to build with: ./gradlew cargoBuild
