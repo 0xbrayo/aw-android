@@ -54,40 +54,38 @@ class SessionEventWatcher(val context: Context) {
         }
     }
 
+    /**
+     * Synchronously process events since last update.
+     * Returns the number of events sent.
+     */
+    fun processEventsSinceLastUpdate(): Int {
+        Log.i(TAG, "Processing session events...")
+
+        // Create bucket for session events
+        ri.createBucketHelper(SESSION_BUCKET_ID, "currentwindow")
+        ri.createBucketHelper(UNLOCK_BUCKET_ID, "os.lockscreen.unlocks")
+
+        lastUpdated = getLastEventTime()
+        Log.w(TAG, "lastUpdated: ${lastUpdated?.toString() ?: "never"}")
+
+        val startTimestamp = lastUpdated?.toEpochMilli() ?: 0L
+        val sessions = sessionParser.parseUsageEventsSince(startTimestamp)
+
+        var eventsSent = 0
+
+        for (session in sessions) {
+            // Insert session as individual event
+            insertSessionAsEvent(session)
+            eventsSent++
+        }
+        
+        Log.i(TAG, "Finished processing events, sent $eventsSent session events")
+        return eventsSent
+    }
+
     private inner class SendSessionEventTask : AsyncTask<Void, AppSession, Int>() {
         override fun doInBackground(vararg params: Void?): Int {
-            Log.i(TAG, "Sending session events...")
-
-            // Create bucket for session events
-            ri.createBucketHelper(SESSION_BUCKET_ID, "currentwindow")
-            ri.createBucketHelper(UNLOCK_BUCKET_ID, "os.lockscreen.unlocks")
-
-            lastUpdated = getLastEventTime()
-            Log.w(TAG, "lastUpdated: ${lastUpdated?.toString() ?: "never"}")
-
-            val startTimestamp = lastUpdated?.toEpochMilli() ?: 0L
-            val sessions = sessionParser.parseUsageEventsSince(startTimestamp)
-
-            var eventsSent = 0
-
-            for (session in sessions) {
-                // Insert session as individual event
-                insertSessionAsEvent(session)
-
-                if (eventsSent % 10 == 0) {
-                    publishProgress(session)
-                }
-                eventsSent++
-            }
-
-            return eventsSent
-        }
-
-        override fun onProgressUpdate(vararg progress: AppSession) {
-            val session = progress[0]
-            val timestamp = DateTimeUtils.toInstant(java.util.Date(session.endTime))
-            lastUpdated = timestamp
-            Log.i(TAG, "Progress: ${session.appName} - ${lastUpdated.toString()}")
+            return processEventsSinceLastUpdate()
         }
 
         override fun onPostExecute(result: Int?) {
