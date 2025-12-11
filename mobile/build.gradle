@@ -58,11 +58,7 @@ android {
 
     namespace 'net.activitywatch.android'
     // Never got this to work...
-    //if (project.hasProperty("doNotStrip")) {
-    //    packagingOptions {
-    //        doNotStrip '**/*.so'
-    //    }
-    //}
+
 
     // Creates a resource versionName with the full version
     // https://stackoverflow.com/a/36468650/965332
