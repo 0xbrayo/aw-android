@@ -33,17 +33,19 @@ class MediaWatcher : NotificationListenerService() {
         private const val PULSETIME = 60.0
 
         fun isNotificationAccessGranted(context: android.content.Context): Boolean {
-            val componentName = ComponentName(context, MediaWatcher::class.java)
+            val flattenedComponent = ComponentName(context, MediaWatcher::class.java).flattenToString()
             val enabledListeners = android.provider.Settings.Secure.getString(
                 context.contentResolver,
                 "enabled_notification_listeners"
             ) ?: return false
-            return enabledListeners.contains(componentName.flattenToString())
+            // Parse colon-separated list and match exactly to avoid false positives
+            return enabledListeners.split(":").any { it == flattenedComponent }
         }
     }
 
     private var ri: RustInterface? = null
     private var sessionManager: MediaSessionManager? = null
+    private var activeSessionsListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
     private val activeControllers = mutableMapOf<MediaSession.Token, MediaController>()
     private val activeCallbacks = mutableMapOf<MediaSession.Token, MediaController.Callback>()
 
@@ -82,10 +84,11 @@ class MediaWatcher : NotificationListenerService() {
     private fun registerActiveSessionListener() {
         val componentName = ComponentName(this, MediaWatcher::class.java)
         try {
-            sessionManager?.addOnActiveSessionsChangedListener(
-                { controllers -> onActiveSessionsChanged(controllers) },
-                componentName
-            )
+            val listener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+                onActiveSessionsChanged(controllers)
+            }
+            activeSessionsListener = listener
+            sessionManager?.addOnActiveSessionsChangedListener(listener, componentName)
             // Process currently active sessions
             val activeSessions = sessionManager?.getActiveSessions(componentName)
             if (activeSessions != null) {
@@ -224,6 +227,13 @@ class MediaWatcher : NotificationListenerService() {
     }
 
     private fun unregisterAllCallbacks() {
+        // Remove the active sessions listener to prevent leaks
+        activeSessionsListener?.let { listener ->
+            sessionManager?.removeOnActiveSessionsChangedListener(listener)
+        }
+        activeSessionsListener = null
+
+        // Remove all per-controller callbacks
         for ((token, controller) in activeControllers) {
             activeCallbacks[token]?.let { controller.unregisterCallback(it) }
         }

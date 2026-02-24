@@ -138,7 +138,9 @@
             android:layout_width="30dp"
             android:layout_height="30dp"
             android:src="@drawable/ic_x"
-            android:paddingEnd="10dp"/>
+            android:paddingEnd="10dp"
+            android:contentDescription=""
+            android:importantForAccessibility="no"/>
 
         <LinearLayout
             android:layout_width="0dp"
