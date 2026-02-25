@@ -130,6 +130,8 @@ class FeaturesFragment : Fragment() {
 
 
 class PermissionsFragment : Fragment() {
+    private var notificationSettingsOpened = false
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -161,6 +163,12 @@ class PermissionsFragment : Fragment() {
         val usagePermissionGranted = UsageStatsWatcher.isUsageAllowed(requireContext())
         val accessibilityPermissionGranted = UsageStatsWatcher.isAccessibilityAllowed(requireContext())
         val notificationPermissionGranted = MediaWatcher.isNotificationAccessGranted(requireContext())
+
+        // Auto-request notification access as part of onboarding (only once per fragment instance)
+        if (!notificationPermissionGranted && !notificationSettingsOpened) {
+            notificationSettingsOpened = true
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
 
         // Disable buttons if permissions granted
         view?.findViewById<Button>(R.id.btnGrantUsagePermission)?.isEnabled = !usagePermissionGranted
