@@ -185,7 +185,6 @@ jobs:
       with:
         path: mobile/src/main/jniLibs/
         key: ${{ env.cache-name }}-release-${{ env.RELEASE }}-ndk-${{ env.NDK_VERSION }}-${{ hashFiles('.git/modules/aw-server-rust/HEAD') }}
-        fail-on-cache-miss: true
 
     - name: Check that jniLibs present
       run: |
@@ -270,7 +269,6 @@ jobs:
       with:
         path: mobile/src/main/jniLibs/
         key: ${{ env.cache-name }}-release-${{ env.RELEASE }}-ndk-${{ env.NDK_VERSION }}-${{ hashFiles('.git/modules/aw-server-rust/HEAD') }}
-        fail-on-cache-miss: true
     - name: Check that jniLibs present
       run: |
         test -e mobile/src/main/jniLibs/x86_64/libaw_server.so
@@ -320,7 +318,6 @@ jobs:
       with:
         path: mobile/src/main/jniLibs/
         key: ${{ env.cache-name }}-release-${{ env.RELEASE }}-ndk-${{ env.NDK_VERSION }}-${{ hashFiles('.git/modules/aw-server-rust/HEAD') }}
-        fail-on-cache-miss: true
 
     - name: Display structure of downloaded files
       run: |
