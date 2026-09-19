@@ -254,13 +254,18 @@ jobs:
         JKS_STOREPASS: ${{ secrets.KEY_ANDROID_JKS_STOREPASS }}
         JKS_KEYPASS: ${{ secrets.KEY_ANDROID_JKS_KEYPASS }}
       run: |
-        make dist/aw-android.${{ matrix.type }}
+        if [ "${{ matrix.type }}" = apk ]; then
+          make build-apk
+        else
+          make build-bundle
+        fi
 
     - name: Upload
       uses: actions/upload-artifact@v4
       with:
         name: aw-android-${{ matrix.type }}
         path: dist/aw-android*.${{ matrix.type }}
+        if-no-files-found: error
 
     # Release builds run R8 (mobile/build.gradle `minifyEnabled true`), so
     # crash stacks are obfuscated without the mapping file. The AAB carries its
@@ -312,6 +317,7 @@ jobs:
         bash scripts/previous-release-tag.sh --self-test
         bash scripts/strip-research-suffix.sh --self-test
         python3 scripts/user-facing-changelog.py --self-test
+        python3 -m unittest discover -s scripts -p 'test_check_release_apks.py'
 
     - name: Set up JDK
       uses: actions/setup-java@v4
@@ -352,10 +358,11 @@ jobs:
     # unsigned and is not published; it only has to get through
     # minifyReleaseWithR8 and shrinkReleaseRes. lintVitalRelease is excluded:
     # the tag build still runs it, and it is not what this step is checking.
-    - name: Build release variant (exercises R8)
+    - name: Build release APKs (exercises R8 and ABI splits)
       run: |
         # Pin the standard flavor explicitly (flavor task names are variant-suffixed).
-        ./gradlew :mobile:assembleStandardRelease -x lintVitalStandardRelease
+        ./gradlew :mobile:assembleStandardRelease -PsplitApks=true -x lintVitalStandardRelease
+        python3 scripts/check-release-apks.py mobile/build/outputs/apk/standard/release
         test -s mobile/build/outputs/mapping/standardRelease/mapping.txt
 
 

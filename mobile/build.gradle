@@ -1,6 +1,10 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+// Opt in for GitHub release APKs; regular debug builds and Play bundles keep
+// their existing output layout. `make build-apk RELEASE=true` sets this flag.
+def splitApks = providers.gradleProperty('splitApks').map { it.toBoolean() }.getOrElse(false)
+
 android {
     compileSdk 36
     ndkVersion "28.2.13676358"
@@ -32,6 +36,14 @@ android {
         //}
     }
     flavorDimensions "distribution"
+    splits {
+        abi {
+            enable splitApks
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+            universalApk true
+        }
+    }
     productFlavors {
         standard {
             dimension "distribution"
@@ -70,8 +82,11 @@ android {
             // armeabi-v7a debug Rust binaries are very large and can corrupt the CI
             // artifact when disk space is tight; they aren't needed for x86_64 emulator
             // runs or any arm64-v8a device released since ~2014.
-            ndk {
-                abiFilters 'arm64-v8a', 'x86_64'
+            // AGP does not allow ndk.abiFilters together with ABI splits.
+            if (!splitApks) {
+                ndk {
+                    abiFilters 'arm64-v8a', 'x86_64'
+                }
             }
         }
     }

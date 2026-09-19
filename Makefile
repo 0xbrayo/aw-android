@@ -27,8 +27,28 @@ metadata: fastlane/metadata/android/en-US/images/icon.png
 # builds an app bundle, puts it in dist
 build-bundle: dist/aw-android.aab
 
-# builds a complete, signed apk, puts it in dist
+# Release builds publish a universal APK plus one standalone APK per ABI.
+# Debug builds keep the existing single-APK path.
 build-apk: dist/aw-android.apk
+
+.PHONY: build-apk build-release-apks
+build-release-apks:
+	./gradlew :mobile:assembleStandardRelease -PsplitApks=true
+	python3 scripts/check-release-apks.py $(APKDIR)/standard/release
+	mkdir -p dist
+	@set -e; for abi in universal armeabi-v7a arm64-v8a x86 x86_64; do \
+		input="$(APKDIR)/standard/release/mobile-standard-$$abi-release-unsigned.apk"; \
+		output="dist/aw-android-$$abi.apk"; \
+		if [ "$$abi" = universal ]; then output="dist/aw-android.apk"; fi; \
+		if [ "$(HAS_SECRETS)" = true ]; then \
+			cp "$$input" "$$output.unsigned.apk"; \
+			./scripts/sign_apk.sh "$$output.unsigned.apk" "$$output"; \
+		else \
+			echo "No key secrets set, copying unsigned $$output"; \
+			cp "$$input" "$$output"; \
+		fi; \
+	done
+	python3 scripts/check-release-apks.py dist --published
 
 # Attempts at working with bundletool to build device-specific APKs
 # See: https://github.com/ActivityWatch/aw-android/issues/61
@@ -128,6 +148,10 @@ else
 endif
 
 # Signed release APK
+ifeq ($(RELEASE_TYPE),release)
+# Keep the historical direct target working, including callers outside CI.
+dist/aw-android.apk: build-release-apks
+else
 dist/aw-android.apk: $(APKDIR)/standard/$(RELEASE_TYPE)/mobile-standard-$(RELEASE_TYPE_UNSIGNED).apk
 	mkdir -p dist
 	@# Only sign if we have key secrets set ($JKS_KEYPASS and $JKS_STOREPASS)
@@ -136,6 +160,7 @@ ifneq ($(HAS_SECRETS), true)
 	cp $< $@
 else
 	./scripts/sign_apk.sh $< $@
+endif
 endif
 
 # for mobile-standard-debug.apk and mobile-standard-debug-androidTest.apk

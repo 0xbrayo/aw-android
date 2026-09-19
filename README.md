@@ -17,6 +17,19 @@ Available on Google Play:
 
 Install the APK from the Play Store or from the [GitHub releases](https://github.com/ActivityWatch/aw-android/releases).
 
+GitHub releases provide standalone APKs for each CPU architecture:
+
+- `aw-android-arm64-v8a.apk`: most modern Android phones and tablets.
+- `aw-android-armeabi-v7a.apk`: devices running 32-bit ARM Android.
+- `aw-android-x86.apk` and `aw-android-x86_64.apk`: Intel devices and compatible emulators.
+- `aw-android.apk`: universal APK, containing all four architectures, if unsure.
+
+Each architecture-specific APK installs on its own and downloads fewer native
+libraries than the universal APK. With adb, `adb shell getprop ro.product.cpu.abi`
+shows the device's preferred architecture. All APKs for a release use the same
+version code and signing key, so compatible APKs can update an existing install.
+Google Play continues to use the AAB to deliver device-specific downloads.
+
 ### For Oculus Quest
 
 > **Note** 
@@ -54,6 +67,15 @@ To build aw-webui you need a recent version of node/npm installed. You can then 
 ### Putting it all together
 
 Once both aw-server-rust and aw-webui is built, you can build the Android app as any other Android app using Android Studio.
+
+To build all GitHub release APKs, run `RELEASE=true make build-apk`. This enables
+Gradle's ABI splits, checks that every APK contains the expected native libraries,
+and places the universal APK and four architecture-specific APKs in `dist/`.
+The existing `android.jks`, `ANDROID_HOME`, `JKS_STOREPASS`, and `JKS_KEYPASS`
+signing setup signs each APK; builds without signing secrets remain unsigned.
+For an unsigned Gradle-only build, use
+`./gradlew :mobile:assembleStandardRelease -PsplitApks=true`.
+Ordinary debug builds and `make build-bundle` keep their existing behavior.
 
 ### Making a release
 
